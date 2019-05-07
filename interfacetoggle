@@ -1,1 +1,85 @@
-/etc/interfacetoggle
+#!/bin/ksh
+
+disableInterface() {
+  mv $INTERFACEENABLEDFILE $INTERFACEDISABLEDFILE
+}
+
+enableInterface() {
+  mv $INTERFACEDISABLEDFILE $INTERFACEENABLEDFILE
+}
+
+unsetInterface() {
+  ifconfig $INTERFACE down
+  ifconfig $INTERFACE -inet
+}
+
+startInterface() {
+  sh -x /etc/netstart $INTERFACE
+}
+
+toggleProfile() {
+  cp $INTERFACEDISABLEDPROFILE $INTERFACEENABLEDFILE
+  toggleIKECTL
+}
+
+toggleIKECTL() {
+  if [ "$PROFILE" = "wap" ]
+    then
+      echo "Decoupling IKE"      
+      /usr/sbin/ikectl decouple
+    else
+      echo "Coupling IKE"
+      /usr/sbin/ikectl couple
+  fi
+}
+
+perform() {
+  ACTION="NO"
+  INTERFACEENABLEDFILE="/etc/hostname.$INTERFACE"
+  INTERFACEDISABLEDFILE="/etc/hostname.$INTERFACE.disabled"
+  INTERFACEDISABLEDPROFILE="/etc/hostname.$INTERFACE.$PROFILE"
+
+  if [[ -e $INTERFACEDISABLEDPROFILE ]]
+    then
+      ACTION="ENABLE/TOGGLE"
+      toggleProfile
+      startInterface
+  else
+    if [[ -e $INTERFACEENABLEDFILE ]]
+      then
+        ACTION="DISABLE"
+        disableInterface
+        unsetInterface
+    else
+      if [[ -e $INTERFACEDISABLEDFILE ]]
+        then
+          ACTION="ENABLE"
+          enableInterface
+          startInterface
+      fi
+    fi
+  fi
+
+  echo "Performed $ACTION action."
+}
+
+if [ $# -eq 0 ]
+  then
+    cat << EOF
+Toggles your network interface, with optional profile.
+usage: interfacetoggle <interface> [<profile>]
+
+Example;
+  doas /bin/sh -x /etc/interfacetoggle iwm0
+  doas /bin/sh -x /etc/interfacetoggle iwm0 home
+
+Note:
+Above examples encourage usage of doas.
+EOF
+    return 0 2>/dev/null
+    exit 0
+  else
+    INTERFACE=$1
+    PROFILE=$2
+    perform
+fi
